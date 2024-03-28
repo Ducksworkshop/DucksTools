@@ -4,7 +4,7 @@ bl_info = {
     "category": "Object",
     "author": "Your Name",
     "version": (1, 0),
-    "description": "Comprehensive collection manipulation tools",
+    "description": "Some tools",
 }
 
 import bpy
