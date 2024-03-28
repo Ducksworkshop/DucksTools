@@ -1,0 +1,170 @@
+bl_info = {
+    "name": "Ducks_Collection_Tools",
+    "blender": (2, 80, 0),
+    "category": "Object",
+    "author": "Your Name",
+    "version": (1, 0),
+    "description": "Comprehensive collection manipulation tools",
+}
+
+import bpy
+import random
+
+class CollectionToolsProperties(bpy.types.PropertyGroup):
+    num_subfolders: bpy.props.IntProperty(
+        name="Number of Subfolders",
+        default=2,
+        min=1,
+        description="Specify the number of subfolders to be created"
+    )
+
+class CreateCollectionStructureOperator(bpy.types.Operator):
+    bl_idname = "wm.create_collection_structure"
+    bl_label = "Create Collection Structure"
+
+    def execute(self, context):
+        num_subfolders = context.scene.collection_tools.num_subfolders
+
+        main_collections = [
+            "HIGH",
+            "LOW",
+            "Render Meshes",
+            "Game Provided Mesh",
+            "Construction",
+        ]
+
+        for collection_name in main_collections:
+            main_collection = bpy.data.collections.new(collection_name)
+            bpy.context.scene.collection.children.link(main_collection)
+
+            if "HIGH" in collection_name or "LOW" in collection_name:
+                for i in range(num_subfolders):
+                    sub_collection = bpy.data.collections.new(f"{collection_name}{i + 1}")
+                    main_collection.children.link(sub_collection)
+
+        return {'FINISHED'}
+
+class ApplyRandomColorTagsOperator(bpy.types.Operator):
+    bl_idname = "wm.apply_random_color_tags"
+    bl_label = "Apply Random Color Tags"
+
+    def execute(self, context):
+        for collection in bpy.data.collections:
+            if collection.name != bpy.context.scene.collection.name:
+                random_color_tag = f'COLOR_{random.randint(1, 8):02d}'
+                collection.color_tag = random_color_tag
+                print(f"Color tag set for collection {collection.name}: {random_color_tag}")
+
+        return {'FINISHED'}
+
+class ApplyRandomColorsOperator(bpy.types.Operator):
+    bl_idname = "wm.apply_random_colors"
+    bl_label = "Apply Random Colors"
+
+    def execute(self, context):
+        selected_objects = bpy.context.selected_objects
+
+        for obj in selected_objects:
+            if not obj.data.materials:
+                obj.data.materials.append(bpy.data.materials.new(name="Material"))
+
+            mat = obj.data.materials[0]
+            mat.diffuse_color = (random.random(), random.random(), random.random(), 1.0)
+
+        print(f"Random colors applied to {len(selected_objects)} selected objects")
+
+        return {'FINISHED'}
+
+class OBJECT_OT_rename_by_collection(bpy.types.Operator):
+    bl_idname = "object.rename_by_collection"
+    bl_label = "Rename Objects Based on Collection Name"
+
+    def execute(self, context):
+        renamed_counts = {}
+
+        for obj in context.selected_objects:
+            if obj.users_collection:
+                collection = obj.users_collection[0]
+                collection_name = collection.name
+
+                if collection_name not in renamed_counts:
+                    renamed_counts[collection_name] = 1
+                else:
+                    renamed_counts[collection_name] += 1
+
+                new_name = f"{collection_name}.{renamed_counts[collection_name]}"
+                obj.name = new_name
+                self.report({'INFO'}, f"Renamed object to {new_name}")
+            else:
+                self.report({'WARNING'}, f"Object '{obj.name}' is not in any collection and was not renamed.")
+
+        return {'FINISHED'}
+
+class OBJECT_OT_duplicate_and_rename_collection(bpy.types.Operator):
+    bl_idname = "object.duplicate_and_rename_collection"
+    bl_label = "Duplicate & Rename Collection"
+
+    def execute(self, context):
+        active_collection = context.collection
+        duplicate_collection(active_collection)
+
+        self.report({'INFO'}, f"Duplicated and renamed '{active_collection.name}'.")
+        return {'FINISHED'}
+
+def duplicate_collection(collection, parent_collection=None, name_suffix=""):
+    new_collection = bpy.data.collections.new(name=collection.name.replace("LOW", "HIGH") + name_suffix)
+    if parent_collection:
+        parent_collection.children.link(new_collection)
+    else:
+        bpy.context.scene.collection.children.link(new_collection)
+
+    for obj in collection.objects:
+        new_obj = obj.copy()
+        if obj.data:
+            new_obj.data = obj.data.copy()
+        new_collection.objects.link(new_obj)
+
+    for child in collection.children:
+        duplicate_collection(child, new_collection)
+
+class SimplePanel(bpy.types.Panel):
+    bl_label = "Ducks_Tools"
+    bl_idname = "PT_SimplePanel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'Ducks_Tools'
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.prop(context.scene.collection_tools, "num_subfolders")
+        layout.operator("wm.create_collection_structure")
+        layout.operator("wm.apply_random_color_tags")
+        layout.operator("wm.apply_random_colors")
+        layout.operator("object.rename_by_collection")
+        layout.operator("object.duplicate_and_rename_collection")
+
+def register():
+    bpy.utils.register_class(CollectionToolsProperties)
+    bpy.utils.register_class(SimplePanel)
+    bpy.utils.register_class(CreateCollectionStructureOperator)
+    bpy.utils.register_class(ApplyRandomColorTagsOperator)
+    bpy.utils.register_class(ApplyRandomColorsOperator)
+    bpy.utils.register_class(OBJECT_OT_rename_by_collection)
+    bpy.utils.register_class(OBJECT_OT_duplicate_and_rename_collection)
+
+    bpy.types.Scene.collection_tools = bpy.props.PointerProperty(type=CollectionToolsProperties)
+
+def unregister():
+    bpy.utils.unregister_class(CollectionToolsProperties)
+    bpy.utils.unregister_class(SimplePanel)
+    bpy.utils.unregister_class(CreateCollectionStructureOperator)
+    bpy.utils.unregister_class(ApplyRandomColorTagsOperator)
+    bpy.utils.unregister_class(ApplyRandomColorsOperator)
+    bpy.utils.unregister_class(OBJECT_OT_rename_by_collection)
+    bpy.utils.unregister_class(OBJECT_OT_duplicate_and_rename_collection)
+
+    del bpy.types.Scene.collection_tools
+
+if __name__ == "__main__":
+    register()
